@@ -96,6 +96,8 @@ let currentRound = null;
 let currentSteps = null;
 let currentIndex = 0;
 let pastLogs = [];
+// タスク管理だけ、操作ごとのステップを残し、実行ログの記録からそのステップへ移れるようにする。
+let logRounds = [];
 let isHidingCurrentLogs = false;
 const PLAY_INTERVAL = 2000;
 
@@ -212,11 +214,25 @@ function renderExplanation(title, what, why) {
   $('.explain-why').text(why);
 }
 
-function appendLogItem($list, count, name, value, active) {
+function appendLogItem($list, count, name, value, active, target) {
   const $item = $('<li>', { class: active ? 'log-item is-active' : 'log-item' });
-  $item.append($('<span>', { class: 'log-step', text: String(count) }));
-  $item.append($('<span>', { class: 'log-name', text: name }));
-  $item.append($('<span>', { class: 'log-result', text: value }));
+  let $content = $item;
+  if (target) {
+    $content = $('<button>', {
+      type: 'button',
+      class: 'log-jump',
+      'data-round': String(target.roundIndex),
+      'data-step': String(target.stepIndex),
+    });
+    if (active) {
+      $content.attr('aria-current', 'step');
+    }
+    $item.addClass('is-jumpable');
+    $item.append($content);
+  }
+  $content.append($('<span>', { class: 'log-step', text: String(count) }));
+  $content.append($('<span>', { class: 'log-name', text: name }));
+  $content.append($('<span>', { class: 'log-result', text: value }));
   $list.append($item);
 }
 
@@ -236,7 +252,15 @@ function setControlsLocked(locked) {
   $('.hand-button, .score-reset, .task-input, .task-add, .task-check, .task-reset, .level-select').prop('disabled', locked);
 }
 
+// タスク管理は続けて操作するため、ステップを自動で送らず、途中でも操作を止めない。
+function isManualPlayback() {
+  return currentLevel === '2';
+}
+
 function isGameLocked() {
+  if (isManualPlayback()) {
+    return false;
+  }
   if (!currentSteps || currentSteps.length === 0) {
     return false;
   }
@@ -264,8 +288,8 @@ function renderDisplayedScore(score) {
 }
 
 function renderAppAt(round, index) {
+  // タスク管理のAPPは操作の直後に更新済み。ステップを前後させても表示は変えない。
   if (round.level === '2') {
-    renderTaskAppAt(round, index);
     return;
   }
   if (round.kind === 'reset') {
@@ -283,7 +307,61 @@ function renderAppAt(round, index) {
   renderDisplayedScore(index >= 3 ? round.scoreAfter : round.scoreBefore);
 }
 
+function findLogRound(round) {
+  let roundIndex = 0;
+  while (roundIndex < logRounds.length) {
+    if (logRounds[roundIndex].round === round) {
+      return logRounds[roundIndex];
+    }
+    roundIndex += 1;
+  }
+  return null;
+}
+
+function renderRoundLogs() {
+  const $list = $('.log-list');
+  if ($list.length === 0) {
+    return;
+  }
+  $list.empty();
+  let count = 0;
+  logRounds.forEach(function (entry, roundIndex) {
+    for (let stepIndex = 0; stepIndex <= entry.reached; stepIndex += 1) {
+      count += 1;
+      appendLogItem(
+        $list,
+        count,
+        entry.steps[stepIndex].title,
+        entry.steps[stepIndex].logValue,
+        entry.round === currentRound && stepIndex === currentIndex,
+        { roundIndex: roundIndex, stepIndex: stepIndex }
+      );
+    }
+  });
+  if (count === 0) {
+    showIdleLog();
+    return;
+  }
+  const listElement = $list.get(0);
+  const activeItem = $list.find('.log-item.is-active').get(0);
+  if (listElement && activeItem) {
+    const itemTop = activeItem.getBoundingClientRect().top
+      - listElement.getBoundingClientRect().top
+      + listElement.scrollTop;
+    const itemBottom = itemTop + activeItem.offsetHeight;
+    if (itemTop < listElement.scrollTop) {
+      listElement.scrollTop = itemTop;
+    } else if (itemBottom > listElement.scrollTop + listElement.clientHeight) {
+      listElement.scrollTop = itemBottom - listElement.clientHeight;
+    }
+  }
+}
+
 function renderPlaybackLog(index) {
+  if (isManualPlayback()) {
+    renderRoundLogs();
+    return;
+  }
   const $list = $('.log-list');
   if ($list.length === 0) {
     return;
@@ -321,6 +399,14 @@ function showStepAt(index) {
     return;
   }
   currentIndex = index;
+  if (isManualPlayback()) {
+    const entry = findLogRound(currentRound);
+    if (entry) {
+      entry.reached = Math.max(entry.reached, index);
+    } else {
+      logRounds.push({ round: currentRound, steps: currentSteps, reached: index });
+    }
+  }
   const step = currentSteps[index];
   renderAppAt(currentRound, index);
   renderCode(step.code, step.snippets);
@@ -377,7 +463,7 @@ function beginAutoplay() {
   }
   isAutoPlaying = true;
   updatePlaybackControls();
-  setControlsLocked(true);
+  setControlsLocked(isGameLocked());
   scheduleAdvance();
 }
 
@@ -393,19 +479,29 @@ function commitPreviousRound() {
   isHidingCurrentLogs = false;
 }
 
-// 勝敗とスコアはクリック直後に確定する。
-// APPとJS LOGは、記録した同じステップを表示する。自動再生は2秒間隔。
+// アプリ本体の処理は操作の直後に確定する。
+// じゃんけんは、APPとJS LOGが同じステップを2秒間隔で自動再生する。
+// タスク管理は最初のステップだけを表示し、続きは再生操作で進める。
 function startRound(round, steps) {
   if (isGameLocked()) {
     return;
   }
   stopAutoplay();
-  commitPreviousRound();
+  if (isManualPlayback()) {
+    logRounds.forEach(function (entry) {
+      entry.reached = entry.steps.length - 1;
+    });
+    logRounds.push({ round: round, steps: steps, reached: 0 });
+  } else {
+    commitPreviousRound();
+  }
   currentRound = round;
   currentSteps = steps;
   isHidingCurrentLogs = false;
   showStepAt(0);
-  beginAutoplay();
+  if (!isManualPlayback()) {
+    beginAutoplay();
+  }
 }
 
 function renderScore() {
@@ -565,6 +661,21 @@ function onLastClick() {
   moveTo(currentSteps.length - 1);
 }
 
+function onLogJumpClick(event) {
+  const roundIndex = Number($(event.currentTarget).attr('data-round'));
+  const stepIndex = Number($(event.currentTarget).attr('data-step'));
+  const entry = logRounds[roundIndex];
+  if (!isManualPlayback() || !entry || !entry.steps[stepIndex]) {
+    return;
+  }
+  stopAutoplay();
+  currentRound = entry.round;
+  currentSteps = entry.steps;
+  isHidingCurrentLogs = false;
+  showStepAt(stepIndex);
+  $('.log-jump[data-round="' + roundIndex + '"][data-step="' + stepIndex + '"]').trigger('focus');
+}
+
 function onHandClick(event) {
   if (isGameLocked() || currentLevel !== '1') {
     return;
@@ -623,6 +734,7 @@ function onLogClearClick() {
     showStepAt(currentSteps.length - 1);
   }
   pastLogs = [];
+  logRounds = [];
   isHidingCurrentLogs = true;
   showIdleLog();
   updatePlaybackControls();
@@ -643,7 +755,7 @@ function showIdlePanel() {
     renderVariables(taskRows(tasks, null));
     renderExplanation(
       'タスクを操作すると処理が始まります',
-      '追加は、入力を読む、空欄か調べる、タスクを作る、配列に入れる、画面に表示する、の順です。チェックは、状態を読む、対象を探す、done を書き換える、取り消し線を付け外しする、の順です。リセットは、一覧のタスクをすべて消します。',
+      '追加は、入力を読む、空欄か調べる、タスクを作る、配列に入れる、画面に表示する、の順です。チェックは、状態を読む、対象を探す、done を書き換える、取り消し線を付け外しする、の順です。リセットは、一覧のタスクをすべて消します。操作のあと、「1つ進む」か「再生」を押すと、処理を1段階ずつ進められます。',
       'コードがどの順番で動くかを、1段階ずつ確認するためです。'
     );
   } else {
@@ -689,8 +801,7 @@ function showTask(task, index) {
   const $item = $('<li>', { class: 'task-item' });
   const $check = $('<input>', { type: 'checkbox', class: 'task-check' });
   $check.attr('data-index', String(index));
-  const checked = task.checked === true || (task.checked === undefined && task.done === true);
-  if (checked) {
+  if (task.done === true) {
     $check.prop('checked', true);
   }
   const $title = $('<span>', { class: 'task-title', text: task.title });
@@ -731,27 +842,16 @@ function copyTasks() {
   return copy;
 }
 
-function renderTaskList(list, paint) {
+function renderTaskList(list) {
   const $list = $('.task-list');
   isRenderingTasks = true;
   $list.empty();
   let index = 0;
   while (index < list.length) {
-    let task = list[index];
-    if (paint && paint.index === index) {
-      task = {
-        title: task.title,
-        done: paint.strike === true,
-        checked: paint.checked === true,
-      };
-    }
-    showTask(task, index);
+    showTask(list[index], index);
     index += 1;
   }
   isRenderingTasks = false;
-  if (isGameLocked()) {
-    $('.task-check').prop('disabled', true);
-  }
 }
 
 function taskRows(list, changedIndex) {
@@ -774,25 +874,6 @@ function taskRows(list, changedIndex) {
     index += 1;
   }
   return rows;
-}
-
-function renderTaskAppAt(round, index) {
-  if (round.kind === 'add') {
-    const list = index >= 4 ? round.tasksAfter : round.tasksBefore;
-    renderTaskList(list);
-    $('.task-input').val(index === 0 ? round.title : '');
-    return;
-  }
-  if (round.kind === 'reset' || round.kind === 'load') {
-    renderTaskList(round.tasksAfter);
-    $('.task-input').val('');
-    return;
-  }
-  renderTaskList(round.tasks, {
-    index: round.index,
-    checked: index >= 2 ? round.doneAfter : round.doneBefore,
-    strike: index >= 3 ? round.doneAfter : round.doneBefore,
-  });
 }
 
 function buildAddSteps(round) {
@@ -959,6 +1040,8 @@ function onTaskAdd(event) {
   const tasksBefore = copyTasks();
   const task = createTask(title.trim());
   const index = addTaskToList(task);
+  showTask(task, index);
+  $('.task-input').val('');
   const tasksAfter = copyTasks();
   const hadSavedTasks = hasSavedTasks;
   const tasksJson = tasksToJson(tasksAfter);
@@ -1013,6 +1096,8 @@ function onTaskReset() {
   resetTasks();
   removeStoredTasks();
   hasSavedTasks = false;
+  renderTaskList(tasks);
+  $('.task-input').val('');
   const tasksAfter = copyTasks();
   const round = {
     level: '2',
@@ -1060,6 +1145,8 @@ function onTaskCheck(event) {
   const doneBefore = tasks[index].done;
   const doneAfter = readChecked(event);
   setTaskDone(index, doneAfter);
+  renderTaskList(tasks);
+  $('.task-check').eq(index).trigger('focus');
   const tasksAfter = copyTasks();
   const hadSavedTasks = hasSavedTasks;
   const tasksJson = tasksToJson(tasksAfter);
@@ -1158,6 +1245,7 @@ function emptyPlayback() {
     steps: null,
     index: 0,
     pastLogs: [],
+    logRounds: [],
     isHidingCurrentLogs: false,
   };
 }
@@ -1173,6 +1261,7 @@ function capturePlayback() {
     steps: currentSteps,
     index: currentIndex,
     pastLogs: pastLogs,
+    logRounds: logRounds,
     isHidingCurrentLogs: isHidingCurrentLogs,
   };
 }
@@ -1183,6 +1272,7 @@ function restorePlayback(level) {
   currentSteps = saved.steps;
   currentIndex = saved.index;
   pastLogs = saved.pastLogs;
+  logRounds = saved.logRounds;
   isHidingCurrentLogs = saved.isHidingCurrentLogs;
 }
 
@@ -1230,6 +1320,7 @@ function onLevelChange() {
   if (next === currentLevel || !levelInfo[next]) {
     return;
   }
+  stopAutoplay();
   capturePlayback();
   restorePlayback(next);
   applyLevel(next);
@@ -1252,6 +1343,7 @@ $(function () {
   $('.playback-pause').on('click', onPauseClick);
   $('.playback-forward').on('click', onForwardClick);
   $('.playback-last').on('click', onLastClick);
+  $('.log-list').on('click', '.log-jump', onLogJumpClick);
   $('.fold-toggle').on('click', onFoldToggleClick);
   $('.task-form').on('submit', onTaskAdd);
   $('.task-reset').on('click', onTaskReset);

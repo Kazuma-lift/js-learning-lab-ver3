@@ -796,6 +796,34 @@ button {
   color: var(--color-text-sub);
 }
 
+.log-item.is-jumpable {
+  display: block;
+  padding: 0;
+}
+
+.log-jump {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.log-jump:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.log-jump:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .log-item.is-active {
   border-left-color: var(--color-accent);
   background: rgba(117, 212, 229, 0.12);
