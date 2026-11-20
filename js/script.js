@@ -19,7 +19,57 @@ function createInitialTasks() {
   tasks.push({ title: 'セカイを', done: false });
 }
 
-createInitialTasks();
+const taskStorageKey = 'js-learning-lab-tasks';
+
+function readStoredTasks() {
+  const storedText = localStorage.getItem(taskStorageKey);
+  return storedText;
+}
+
+function parseStoredTasks(storedText) {
+  const storedTasks = JSON.parse(storedText);
+  return storedTasks;
+}
+
+function tasksToJson(list) {
+  const tasksJson = JSON.stringify(list);
+  return tasksJson;
+}
+
+function writeStoredTasks(tasksJson) {
+  localStorage.setItem(taskStorageKey, tasksJson);
+}
+
+function removeStoredTasks() {
+  localStorage.removeItem(taskStorageKey);
+}
+
+function isTaskList(value) {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  let index = 0;
+  while (index < value.length) {
+    const task = value[index];
+    if (!task || typeof task.title !== 'string' || typeof task.done !== 'boolean') {
+      return false;
+    }
+    index += 1;
+  }
+  return true;
+}
+
+function replaceTasks(list) {
+  tasks.length = 0;
+  let index = 0;
+  while (index < list.length) {
+    tasks.push({
+      title: list[index].title,
+      done: list[index].done,
+    });
+    index += 1;
+  }
+}
 
 const levelInfo = {
   1: {
@@ -36,6 +86,9 @@ const levelInfo = {
 
 let currentLevel = '2';
 let isRenderingTasks = false;
+let hasSavedTasks = false;
+let hasShownTaskLoad = false;
+let taskLoadRound = null;
 
 let stepTimer = null;
 let isAutoPlaying = false;
@@ -43,7 +96,7 @@ let currentRound = null;
 let currentSteps = null;
 let currentIndex = 0;
 let pastLogs = [];
-let hideCurrentLogs = false;
+let isHidingCurrentLogs = false;
 const PLAY_INTERVAL = 2000;
 
 function getPlayerHand(hand) {
@@ -241,7 +294,7 @@ function renderPlaybackLog(index) {
     count += 1;
     appendLogItem($list, count, entry.title, entry.logValue, false);
   });
-  if (!hideCurrentLogs && currentSteps) {
+  if (!isHidingCurrentLogs && currentSteps) {
     for (let stepIndex = 0; stepIndex <= index; stepIndex += 1) {
       count += 1;
       appendLogItem(
@@ -315,7 +368,7 @@ function beginAutoplay() {
     return;
   }
   if (currentIndex >= currentSteps.length - 1) {
-    hideCurrentLogs = false;
+    isHidingCurrentLogs = false;
     showStepAt(0);
   }
   if (currentSteps.length === 1 || currentIndex >= currentSteps.length - 1) {
@@ -329,7 +382,7 @@ function beginAutoplay() {
 }
 
 function commitPreviousRound() {
-  if (currentSteps && !hideCurrentLogs) {
+  if (currentSteps && !isHidingCurrentLogs) {
     currentSteps.forEach(function (step) {
       pastLogs.push({
         title: step.title,
@@ -337,7 +390,7 @@ function commitPreviousRound() {
       });
     });
   }
-  hideCurrentLogs = false;
+  isHidingCurrentLogs = false;
 }
 
 // 勝敗とスコアはクリック直後に確定する。
@@ -350,7 +403,7 @@ function startRound(round, steps) {
   commitPreviousRound();
   currentRound = round;
   currentSteps = steps;
-  hideCurrentLogs = false;
+  isHidingCurrentLogs = false;
   showStepAt(0);
   beginAutoplay();
 }
@@ -481,7 +534,7 @@ function moveTo(index) {
     return;
   }
   stopAutoplay();
-  hideCurrentLogs = false;
+  isHidingCurrentLogs = false;
   showStepAt(index);
 }
 
@@ -566,11 +619,11 @@ function onLogClearClick() {
   const wasPlaying = isAutoPlaying || stepTimer !== null;
   stopAutoplay();
   if (wasPlaying && currentSteps && currentIndex < currentSteps.length - 1) {
-    hideCurrentLogs = false;
+    isHidingCurrentLogs = false;
     showStepAt(currentSteps.length - 1);
   }
   pastLogs = [];
-  hideCurrentLogs = true;
+  isHidingCurrentLogs = true;
   showIdleLog();
   updatePlaybackControls();
   setControlsLocked(isGameLocked());
@@ -730,7 +783,7 @@ function renderTaskAppAt(round, index) {
     $('.task-input').val(index === 0 ? round.title : '');
     return;
   }
-  if (round.kind === 'reset') {
+  if (round.kind === 'reset' || round.kind === 'load') {
     renderTaskList(round.tasksAfter);
     $('.task-input').val('');
     return;
@@ -805,6 +858,37 @@ function buildAddSteps(round) {
       logValue: quote(round.task.title),
       variables: taskRows(round.tasksAfter, round.index),
     },
+  ].concat(buildSaveSteps(round));
+}
+
+function buildSaveSteps(round) {
+  return [
+    {
+      code: tasksToJson,
+      snippets: ['JSON.stringify'],
+      title: 'JSON文字列に変換する',
+      what: 'tasks の配列を、1本の文字列に変換しています。配列そのものと、この文字列は別の形です。',
+      why: 'localStorage には文字列を保存するためです。',
+      logValue: '文字列にした',
+      variables: [
+        { name: 'tasksJson', value: quote(round.tasksJson), changed: true },
+      ],
+    },
+    {
+      code: writeStoredTasks,
+      snippets: ['localStorage.setItem'],
+      title: 'localStorageに保存する',
+      what: '変換した文字列を、ブラウザの localStorage に保存しています。追加と完了の切り替えのときに保存します。',
+      why: 'ページを再読み込みしたあとにも、同じタスクを戻すためです。',
+      logValue: '保存した',
+      variables: [
+        {
+          name: '保存データ',
+          value: (round.hadSavedTasks ? 'あり' : 'なし') + ' → あり',
+          changed: true,
+        },
+      ],
+    },
   ];
 }
 
@@ -860,7 +944,7 @@ function buildToggleSteps(round) {
         { name: 'tasks[' + round.index + '].done', value: String(round.doneAfter), changed: false },
       ],
     },
-  ];
+  ].concat(buildSaveSteps(round));
 }
 
 function onTaskAdd(event) {
@@ -875,6 +959,11 @@ function onTaskAdd(event) {
   const tasksBefore = copyTasks();
   const task = createTask(title.trim());
   const index = addTaskToList(task);
+  const tasksAfter = copyTasks();
+  const hadSavedTasks = hasSavedTasks;
+  const tasksJson = tasksToJson(tasksAfter);
+  writeStoredTasks(tasksJson);
+  hasSavedTasks = true;
   const round = {
     level: '2',
     kind: 'add',
@@ -882,7 +971,9 @@ function onTaskAdd(event) {
     task: task,
     index: index,
     tasksBefore: tasksBefore,
-    tasksAfter: copyTasks(),
+    tasksAfter: tasksAfter,
+    tasksJson: tasksJson,
+    hadSavedTasks: hadSavedTasks,
   };
   startRound(round, buildAddSteps(round));
 }
@@ -918,13 +1009,17 @@ function onTaskReset() {
     return;
   }
   const tasksBefore = copyTasks();
+  const hadSavedTasks = hasSavedTasks;
   resetTasks();
+  removeStoredTasks();
+  hasSavedTasks = false;
   const tasksAfter = copyTasks();
   const round = {
     level: '2',
     kind: 'reset',
     tasksBefore: tasksBefore,
     tasksAfter: tasksAfter,
+    hadSavedTasks: hadSavedTasks,
   };
   startRound(round, [
     {
@@ -935,6 +1030,21 @@ function onTaskReset() {
       why: '追加したタスクと完了のチェックをまとめて消し、空の一覧からやり直すためです。',
       logValue: String(tasksAfter.length),
       variables: resetRows(tasksBefore, tasksAfter),
+    },
+    {
+      code: removeStoredTasks,
+      snippets: ['localStorage.removeItem'],
+      title: '保存データを削除する',
+      what: 'localStorage に保存していたタスクの文字列を削除しています。画面の一覧は空のままです。',
+      why: '再読み込みすると、保存が無いので初期の4件を表示するためです。',
+      logValue: '削除した',
+      variables: [
+        {
+          name: '保存データ',
+          value: (round.hadSavedTasks ? 'あり' : 'なし') + ' → なし',
+          changed: true,
+        },
+      ],
     },
   ]);
 }
@@ -950,6 +1060,11 @@ function onTaskCheck(event) {
   const doneBefore = tasks[index].done;
   const doneAfter = readChecked(event);
   setTaskDone(index, doneAfter);
+  const tasksAfter = copyTasks();
+  const hadSavedTasks = hasSavedTasks;
+  const tasksJson = tasksToJson(tasksAfter);
+  writeStoredTasks(tasksJson);
+  hasSavedTasks = true;
   const round = {
     level: '2',
     kind: 'toggle',
@@ -957,9 +1072,84 @@ function onTaskCheck(event) {
     title: tasks[index].title,
     doneBefore: doneBefore,
     doneAfter: doneAfter,
-    tasks: copyTasks(),
+    tasks: tasksAfter,
+    tasksJson: tasksJson,
+    hadSavedTasks: hadSavedTasks,
   };
   startRound(round, buildToggleSteps(round));
+}
+
+function buildLoadSteps(round) {
+  const steps = [
+    {
+      code: readStoredTasks,
+      snippets: ['localStorage.getItem'],
+      title: '保存データを取得する',
+      what: round.storedText === null
+        ? 'localStorage から保存した文字列を取り出しています。保存が無いので結果は null です。このときは初期の4件を表示します。'
+        : 'localStorage から、以前保存した JSON 文字列を取り出しています。',
+      why: 'ページを開いたときに、前回のタスクがあるかを知るためです。',
+      logValue: round.storedText === null ? 'null' : '取得した',
+      variables: [
+        {
+          name: 'storedText',
+          value: round.storedText === null ? 'null' : quote(round.storedText),
+          changed: true,
+        },
+      ],
+    },
+  ];
+  if (round.storedText !== null) {
+    const rows = taskRows(round.tasksAfter, -1);
+    let rowIndex = 0;
+    while (rowIndex < rows.length) {
+      rows[rowIndex].changed = true;
+      rowIndex += 1;
+    }
+    steps.push({
+      code: parseStoredTasks,
+      snippets: ['JSON.parse'],
+      title: '配列に戻す',
+      what: 'JSON 文字列を、タスクの配列に戻しています。戻した配列の title と done を画面に表示します。',
+      why: 'localStorage に入っているのは文字列なので、タスクとして使うには配列に戻す必要があるためです。',
+      logValue: String(round.tasksAfter.length),
+      variables: rows,
+    });
+  }
+  return steps;
+}
+
+function loadTasks() {
+  const storedText = readStoredTasks();
+  let storedTasks = null;
+  if (storedText !== null) {
+    try {
+      storedTasks = parseStoredTasks(storedText);
+    } catch (error) {
+      storedTasks = null;
+    }
+  }
+  if (!isTaskList(storedTasks)) {
+    if (storedText !== null) {
+      removeStoredTasks();
+    }
+    createInitialTasks();
+    hasSavedTasks = false;
+    storedTasks = null;
+  } else {
+    replaceTasks(storedTasks);
+    hasSavedTasks = true;
+  }
+  taskLoadRound = {
+    level: '2',
+    kind: 'load',
+    storedText: storedTasks === null ? null : storedText,
+    tasksAfter: copyTasks(),
+  };
+}
+
+function startTaskLoadRound() {
+  startRound(taskLoadRound, buildLoadSteps(taskLoadRound));
 }
 
 function emptyPlayback() {
@@ -968,7 +1158,7 @@ function emptyPlayback() {
     steps: null,
     index: 0,
     pastLogs: [],
-    hideCurrentLogs: false,
+    isHidingCurrentLogs: false,
   };
 }
 
@@ -983,7 +1173,7 @@ function capturePlayback() {
     steps: currentSteps,
     index: currentIndex,
     pastLogs: pastLogs,
-    hideCurrentLogs: hideCurrentLogs,
+    isHidingCurrentLogs: isHidingCurrentLogs,
   };
 }
 
@@ -993,7 +1183,7 @@ function restorePlayback(level) {
   currentSteps = saved.steps;
   currentIndex = saved.index;
   pastLogs = saved.pastLogs;
-  hideCurrentLogs = saved.hideCurrentLogs;
+  isHidingCurrentLogs = saved.isHidingCurrentLogs;
 }
 
 function applyLevel(level) {
@@ -1007,6 +1197,11 @@ function applyLevel(level) {
   $('.level-select').val(level);
   if (typeof renderCatalogForLevel === 'function') {
     renderCatalogForLevel(level);
+  }
+  if (level === '2' && !hasShownTaskLoad && !(currentSteps && currentRound) && taskLoadRound && !isGameLocked()) {
+    hasShownTaskLoad = true;
+    startTaskLoadRound();
+    return;
   }
   if (currentSteps && currentRound) {
     showStepAt(currentIndex);
@@ -1063,6 +1258,7 @@ $(function () {
   $('.task-list').on('change', '.task-check', onTaskCheck);
   $('.level-select').on('change', onLevelChange);
   $('.start-begin').on('click', onStartClick);
+  loadTasks();
   renderScore();
   renderTaskList(tasks);
 });

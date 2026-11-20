@@ -756,6 +756,11 @@ button {
   color: var(--color-text-sub);
 }
 
+.var-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .var-value.is-changed {
   color: var(--color-accent);
 }

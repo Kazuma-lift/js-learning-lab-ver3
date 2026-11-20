@@ -1744,6 +1744,145 @@ const codeCatalogLevel2 = [
     ],
     alternatives: [],
   },
+  {
+    name: 'localStorage.setItem()',
+    kind: 'JavaScript',
+    reading: 'ローカルストレージ ドット セットアイテム。',
+    officialName: 'Storage.setItem()。ブラウザの localStorage に、名前と文字列の組を保存します。',
+    summary: 'タスクの配列を変換した文字列を、ブラウザに保存します。',
+    purpose: [
+      'ページを閉じたあとでも、次に開いたときに同じデータを戻したいときに使います。',
+      'このタスク管理では、タスクを追加したときと、完了を切り替えたときに保存します。',
+    ],
+    usage: "localStorage.setItem('名前', 文字列) と書きます。第1引数が保存名、第2引数が保存する文字列です。",
+    example: "function writeStoredTasks(tasksJson) {\n  localStorage.setItem(taskStorageKey, tasksJson);\n}",
+    walkthrough: [
+      { part: 'localStorage', text: 'このブラウザの、このページ用の保存場所です。' },
+      { part: 'taskStorageKey', text: '保存名です。このアプリでは js-learning-lab-tasks です。' },
+      { part: 'tasksJson', text: '配列を JSON.stringify() で変換した1本の文字列です。' },
+    ],
+    result: [
+      '追加やチェックの直後に、最新のタスクが保存されます。保存ボタンはありません。',
+      '同じ保存名でもう一度保存すると、前の文字列は新しい文字列に置き換わります。',
+    ],
+    similar: [],
+    related: [
+      { name: 'JSON.stringify()', text: 'setItem() に渡す前に、配列を文字列へ変換します。' },
+      { name: 'localStorage.getItem()', text: '保存した文字列を、次にページを開いたときに取り出します。' },
+    ],
+    alternatives: [],
+  },
+  {
+    name: 'localStorage.getItem()',
+    kind: 'JavaScript',
+    reading: 'ローカルストレージ ドット ゲットアイテム。',
+    officialName: 'Storage.getItem()。localStorage から、保存名で文字列を取り出します。',
+    summary: '保存してあるタスクの文字列を取り出します。無いときは null です。',
+    purpose: [
+      '以前保存したデータがあるかを知り、ある場合はその文字列を受け取るために使います。',
+      'このタスク管理では、ページを開いたときに一度だけ取り出します。',
+    ],
+    usage: "localStorage.getItem('名前') と書きます。戻り値は保存されていた文字列です。その名前の保存が無いときは null です。",
+    example: "function readStoredTasks() {\n  const storedText = localStorage.getItem(taskStorageKey);\n  return storedText;\n}",
+    walkthrough: [
+      { part: 'taskStorageKey', text: 'setItem() で使ったのと同じ保存名です。' },
+      { part: 'storedText', text: '取り出した JSON 文字列です。保存が無いときは null です。' },
+      { part: 'return', text: '取り出した結果を、呼び出し元へ渡します。' },
+    ],
+    result: [
+      '保存が無いときは storedText は null です。初期の4件を表示します。',
+      '保存があるときは storedText は JSON 文字列です。このあと JSON.parse() で配列に戻します。',
+    ],
+    similar: [],
+    related: [
+      { name: 'JSON.parse()', text: '取り出した文字列を、タスクの配列に戻します。' },
+    ],
+    alternatives: [],
+  },
+  {
+    name: 'localStorage.removeItem()',
+    kind: 'JavaScript',
+    reading: 'ローカルストレージ ドット リムーブアイテム。',
+    officialName: 'Storage.removeItem()。localStorage から、指定した名前の保存を削除します。',
+    summary: 'リセットしたときに、保存してあるタスクの文字列を削除します。',
+    purpose: [
+      '保存したデータを、次に開いたときに戻したくないときに使います。',
+      'このタスク管理では、タスクをリセットしたときに削除します。',
+    ],
+    usage: "localStorage.removeItem('名前') と書きます。その名前の保存だけを消します。ほかの名前の保存は残ります。",
+    example: "function removeStoredTasks() {\n  localStorage.removeItem(taskStorageKey);\n}",
+    walkthrough: [
+      { part: 'removeItem', text: '指定した名前の保存を削除します。' },
+      { part: 'taskStorageKey', text: 'タスクを保存している名前です。' },
+    ],
+    result: [
+      'リセット直後の一覧は空のままです。',
+      'そのあとページを再読み込みすると、保存が無いので初期の4件を表示します。',
+    ],
+    similar: [],
+    related: [
+      { name: 'localStorage.setItem()', text: 'setItem() が保存し、removeItem() がその保存を削除します。' },
+    ],
+    alternatives: [],
+  },
+  {
+    name: 'JSON.stringify()',
+    kind: 'JavaScript',
+    reading: 'ジェイソン ドット ストリングファイ。',
+    officialName: 'JSON.stringify()。値を JSON 形式の文字列に変換します。',
+    summary: 'タスクの配列を、localStorage に入れられる1本の文字列に変換します。',
+    purpose: [
+      '配列やオブジェクトを、文字列として保存したいときに使います。',
+      'このタスク管理では、保存の直前に tasks の配列を変換します。',
+    ],
+    usage: 'JSON.stringify(値) と書きます。戻り値は文字列です。配列そのものとは別の値です。',
+    example: "function tasksToJson(list) {\n  const tasksJson = JSON.stringify(list);\n  return tasksJson;\n}",
+    walkthrough: [
+      { part: 'list', text: '変換するタスクの配列です。' },
+      { part: 'JSON.stringify(list)', text: '配列を、JSON という書き方の文字列にします。' },
+      { part: 'tasksJson', text: '変換結果の文字列です。title と done が文字として並びます。' },
+    ],
+    result: [
+      '配列の tasks はそのまま残り、別に tasksJson という文字列ができます。',
+      'この文字列を localStorage.setItem() に渡して保存します。',
+    ],
+    similar: [
+      { name: 'JSON.parse()', text: 'stringify() は配列を文字列にし、parse() は文字列を配列に戻します。' },
+    ],
+    related: [
+      { name: 'localStorage.setItem()', text: '変換した文字列を保存します。' },
+    ],
+    alternatives: [],
+  },
+  {
+    name: 'JSON.parse()',
+    kind: 'JavaScript',
+    reading: 'ジェイソン ドット パース。',
+    officialName: 'JSON.parse()。JSON 形式の文字列を、配列やオブジェクトに戻します。',
+    summary: '保存してあった文字列を、タスクの配列に戻します。',
+    purpose: [
+      '文字列のままでは title や done を取り出せないので、元の配列に戻すために使います。',
+      'このタスク管理では、ページを開いて保存が見つかったときに戻します。',
+    ],
+    usage: 'JSON.parse(文字列) と書きます。戻り値は、その文字列が表していた配列やオブジェクトです。',
+    example: "function parseStoredTasks(storedText) {\n  const storedTasks = JSON.parse(storedText);\n  return storedTasks;\n}",
+    walkthrough: [
+      { part: 'storedText', text: 'getItem() で取り出した JSON 文字列です。' },
+      { part: 'JSON.parse(storedText)', text: '文字列を、タスクの配列に戻します。' },
+      { part: 'storedTasks', text: '戻した配列です。各要素に title と done があります。' },
+    ],
+    result: [
+      '戻した配列の title と done を、画面の一覧へ表示します。',
+      '文字列の tasksJson と、配列の tasks は別の形です。画面で使うのは配列のほうです。',
+    ],
+    similar: [
+      { name: 'JSON.stringify()', text: '保存する前の変換が stringify()、開いたときの復元が parse() です。' },
+    ],
+    related: [
+      { name: 'localStorage.getItem()', text: 'parse() に渡す文字列を、getItem() で取り出します。' },
+    ],
+    alternatives: [],
+  },
 ];
 
 function renderCatalogForLevel(level) {
