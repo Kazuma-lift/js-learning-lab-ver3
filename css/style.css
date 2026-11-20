@@ -595,7 +595,7 @@ button {
 .catalog-toggle {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(108px, 148px) 76px minmax(0, 1fr);
+  grid-template-columns: minmax(0, max-content) auto minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   padding: 8px 12px;
@@ -623,8 +623,12 @@ button {
 }
 
 .catalog-name {
+  min-width: 0;
+  overflow: hidden;
   font-family: var(--font-mono);
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .catalog-item.is-open .catalog-name {
@@ -637,6 +641,10 @@ button {
   color: var(--color-text-sub);
   font-size: 12px;
   font-weight: 600;
+}
+
+.catalog-kind {
+  white-space: nowrap;
 }
 
 .catalog-summary {
